@@ -45,10 +45,12 @@ function formatMarkdown(text) {
 async function reply(messageId, content, msgType = "text", imageKey = null) {
   try {
     let data = {};
+
     if (msgType === "image" && imageKey) {
+      // Correct structure for sending an image
       data = {
         content: JSON.stringify({
-          image_key: imageKey,
+          image_key: imageKey, // Use image_key for images
         }),
         msg_type: "image",
       };
@@ -62,6 +64,10 @@ async function reply(messageId, content, msgType = "text", imageKey = null) {
       };
     }
 
+    // Log the message data being sent
+    console.log("Message data:", data);
+
+    // Send the message via Lark API
     return await client.im.message.reply({
       path: { message_id: messageId },
       data: data,
@@ -88,8 +94,13 @@ async function cmdHelp(messageId) {
   // Send help text
   await reply(messageId, helpText, "text");
 
+  // Your image_key
+  const imageKey = "img_v3_02f7_53d0ec76-bb17-4554-bef5-5e22842f8bhu";
+
+  // Log image_key
+  console.log("Using image_key:", imageKey);
+
   // Send image preview using image_key
-  const imageKey = "img_v3_02f7_53d0ec76-bb17-4554-bef5-5e22842f8bhu"; // Use your uploaded image_key here
   await reply(messageId, "", "image", imageKey);
 }
 
