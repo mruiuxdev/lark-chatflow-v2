@@ -42,17 +42,29 @@ function formatMarkdown(text) {
   return text;
 }
 
-async function reply(messageId, content, msgType = "text") {
+async function reply(messageId, content, msgType = "text", imageKey = null) {
   try {
-    const formattedContent = formatMarkdown(content);
-    return await client.im.message.reply({
-      path: { message_id: messageId },
-      data: {
+    let data = {};
+    if (msgType === "image" && imageKey) {
+      data = {
+        content: JSON.stringify({
+          image_key: imageKey,
+        }),
+        msg_type: "image",
+      };
+    } else {
+      const formattedContent = formatMarkdown(content);
+      data = {
         content: JSON.stringify({
           text: formattedContent,
         }),
         msg_type: msgType,
-      },
+      };
+    }
+
+    return await client.im.message.reply({
+      path: { message_id: messageId },
+      data: data,
     });
   } catch (e) {
     const errorCode = e?.response?.data?.code;
@@ -72,7 +84,13 @@ async function cmdHelp(messageId) {
   - /clear : Remove conversation history to start a new session.
   - /help : Get more help messages.
   `;
-  await reply(messageId, helpText, "Help");
+
+  const imageLink =
+    "https://chatflow-aowb.onrender.com/api/v1/get-upload-file?chatflowId=dccc3181-d02f-4192-9a59-ddf342a31a28&chatId=12457e21-3585-4874-b042-60becefe54a4&fileName=artifact_1727207408905.png";
+
+  await reply(messageId, helpText, "text");
+
+  await reply(messageId, "", "image", imageLink);
 }
 
 async function cmdClear(sessionId, messageId) {
