@@ -85,12 +85,12 @@ async function cmdHelp(messageId) {
   - /help : Get more help messages.
   `;
 
-  const imageLink =
-    "https://chatflow-aowb.onrender.com/api/v1/get-upload-file?chatflowId=dccc3181-d02f-4192-9a59-ddf342a31a28&chatId=12457e21-3585-4874-b042-60becefe54a4&fileName=artifact_1727207408905.png";
-
+  // Send help text
   await reply(messageId, helpText, "text");
 
-  await reply(messageId, "", "image", imageLink);
+  // Send image preview using image_key
+  const imageKey = "img_v3_02f7_53d0ec76-bb17-4554-bef5-5e22842f8bhu"; // Use your uploaded image_key here
+  await reply(messageId, "", "image", imageKey);
 }
 
 async function cmdClear(sessionId, messageId) {
