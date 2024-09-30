@@ -1,6 +1,7 @@
 const lark = require("@larksuiteoapi/node-sdk");
 const dotenv = require("dotenv");
 const express = require("express");
+const fetch = require("node-fetch"); // Add this for fetch to work
 
 dotenv.config();
 
@@ -10,8 +11,7 @@ const port = process.env.PORT || 3000;
 const LARK_APP_ID = process.env.LARK_APP_ID || "";
 const LARK_APP_SECRET = process.env.LARK_APP_SECRET || "";
 const FLOWISE_API_URL = process.env.FLOWISE_API_URL || "";
-const UPLOAD_IMAGE_URL =
-  "https://chatflow-aowb.onrender.com/api/v1/get-upload-file?chatflowId=dccc3181-d02f-4192-9a59-ddf342a31a28&chatId=12457e21-3585-4874-b042-60becefe54a4&fileName=artifact_1727207408905.png";
+const TENANT_TOKEN = "t-g2069u2mB43R4B3IULWTLY7FXLOVKPWEHUOHQOS6"; // Your tenant token
 
 // Initialize the Lark client
 const client = new lark.Client({
@@ -25,6 +25,39 @@ app.use(express.json());
 
 function logger(...params) {
   console.error(`[CF]`, ...params);
+}
+
+async function uploadImage(imageUrl) {
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error("Image fetch failed");
+
+    const buffer = await response.buffer(); // Fetch the image as a buffer
+
+    const uploadResponse = await fetch(
+      "https://chatflow-aowb.onrender.com/api/v1/get-upload-file",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${TENANT_TOKEN}`,
+          "Content-Type": "application/octet-stream",
+        },
+        body: buffer,
+      }
+    );
+
+    const result = await uploadResponse.json();
+
+    if (result.code === 0) {
+      console.log("Image uploaded successfully:", result.data.image_key);
+      return result.data.image_key;
+    } else {
+      logger("Error uploading image:", result.msg);
+    }
+  } catch (error) {
+    logger("Error uploading image:", error);
+  }
+  return null; // Return null if upload failed
 }
 
 async function cmdProcess({ action, sessionId, messageId }) {
@@ -42,40 +75,6 @@ function formatMarkdown(text) {
   text = text.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
   text = text.replace(/\*(.*?)\*/g, "<i>$1</i>");
   return text;
-}
-
-// Function to reply with image
-async function replyWithImage(messageId, imageKey) {
-  try {
-    return await client.im.message.reply({
-      path: { message_id: messageId },
-      data: {
-        content: JSON.stringify({
-          image_key: imageKey,
-        }),
-        msg_type: "image",
-      },
-    });
-  } catch (e) {
-    logger("Error sending image message to Lark", e, messageId);
-  }
-}
-
-// Upload image and get image_key
-async function uploadImage() {
-  try {
-    const response = await fetch(UPLOAD_IMAGE_URL);
-    const data = await response.json();
-    if (data.code === 0 && data.data.image_key) {
-      logger("Image uploaded successfully, image_key:", data.data.image_key);
-      return data.data.image_key;
-    } else {
-      throw new Error("Image upload failed");
-    }
-  } catch (error) {
-    logger("Error uploading image:", error);
-    throw error;
-  }
 }
 
 async function reply(messageId, content, msgType = "text") {
@@ -152,7 +151,22 @@ async function handleReply(userInput, sessionId, messageId) {
 
   try {
     const answer = await queryFlowise(question, sessionId);
-    return await reply(messageId, answer);
+    // Example of using the uploadImage function
+    const imageKey = await uploadImage(
+      "https://chatflow-aowb.onrender.com/api/v1/get-upload-file?chatflowId=dccc3181-d02f-4192-9a59-ddf342a31a28&chatId=12457e21-3585-4874-b042-60becefe54a4&fileName=artifact_1727207408905.png"
+    );
+
+    if (imageKey) {
+      console.log("Image Key:", imageKey);
+      await reply(messageId, answer, "text");
+      await reply(
+        messageId,
+        `![Image Preview](https://open.larksuite.com/image/v1/${imageKey})`,
+        "image"
+      ); // Adjust this to use the correct image display syntax
+    } else {
+      await reply(messageId, answer);
+    }
   } catch (error) {
     return await reply(
       messageId,
@@ -217,16 +231,8 @@ app.post("/webhook", async (req, res) => {
     }
 
     const userInput = JSON.parse(params.event.message.content);
-
-    // Upload image and get image_key
-    const imageKey = await uploadImage();
-    logger("Image Key and Message ID", { imageKey, messageId });
-
-    // Reply with image and text
-    await replyWithImage(messageId, imageKey);
-    await handleReply(userInput, sessionId, messageId);
-
-    return res.json({ code: 0 });
+    const result = await handleReply(userInput, sessionId, messageId);
+    return res.json(result);
   }
 
   return res.json({ code: 2 });
