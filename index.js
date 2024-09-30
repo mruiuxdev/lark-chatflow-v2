@@ -1,7 +1,6 @@
 const lark = require("@larksuiteoapi/node-sdk");
 const dotenv = require("dotenv");
 const express = require("express");
-const fetch = require("node-fetch"); // Add this for fetch to work
 
 dotenv.config();
 
