@@ -1,6 +1,7 @@
 const lark = require("@larksuiteoapi/node-sdk");
 const dotenv = require("dotenv");
 const express = require("express");
+const fetch = require("node-fetch");
 
 dotenv.config();
 
@@ -10,6 +11,8 @@ const port = process.env.PORT || 3000;
 const LARK_APP_ID = process.env.LARK_APP_ID || "";
 const LARK_APP_SECRET = process.env.LARK_APP_SECRET || "";
 const FLOWISE_API_URL = process.env.FLOWISE_API_URL || "";
+const UPLOAD_IMAGE_URL =
+  "https://chatflow-aowb.onrender.com/api/v1/get-upload-file?chatflowId=dccc3181-d02f-4192-9a59-ddf342a31a28&chatId=12457e21-3585-4874-b042-60becefe54a4&fileName=artifact_1727207408905.png";
 
 // Initialize the Lark client
 const client = new lark.Client({
@@ -42,35 +45,51 @@ function formatMarkdown(text) {
   return text;
 }
 
-async function reply(messageId, content, msgType = "text", imageKey = null) {
+// Function to reply with image
+async function replyWithImage(messageId, imageKey) {
   try {
-    let data = {};
-
-    if (msgType === "image" && imageKey) {
-      // Correct structure for sending an image
-      data = {
+    return await client.im.message.reply({
+      path: { message_id: messageId },
+      data: {
         content: JSON.stringify({
-          image_key: imageKey, // Use image_key for images
+          image_key: imageKey,
         }),
         msg_type: "image",
-      };
+      },
+    });
+  } catch (e) {
+    logger("Error sending image message to Lark", e, messageId);
+  }
+}
+
+// Upload image and get image_key
+async function uploadImage() {
+  try {
+    const response = await fetch(UPLOAD_IMAGE_URL);
+    const data = await response.json();
+    if (data.code === 0 && data.data.image_key) {
+      logger("Image uploaded successfully, image_key:", data.data.image_key);
+      return data.data.image_key;
     } else {
-      const formattedContent = formatMarkdown(content);
-      data = {
+      throw new Error("Image upload failed");
+    }
+  } catch (error) {
+    logger("Error uploading image:", error);
+    throw error;
+  }
+}
+
+async function reply(messageId, content, msgType = "text") {
+  try {
+    const formattedContent = formatMarkdown(content);
+    return await client.im.message.reply({
+      path: { message_id: messageId },
+      data: {
         content: JSON.stringify({
           text: formattedContent,
         }),
         msg_type: msgType,
-      };
-    }
-
-    // Log the message data being sent
-    console.log("Message data:", data);
-
-    // Send the message via Lark API
-    return await client.im.message.reply({
-      path: { message_id: messageId },
-      data: data,
+      },
     });
   } catch (e) {
     const errorCode = e?.response?.data?.code;
@@ -90,18 +109,7 @@ async function cmdHelp(messageId) {
   - /clear : Remove conversation history to start a new session.
   - /help : Get more help messages.
   `;
-
-  // Send help text
-  await reply(messageId, helpText, "text");
-
-  // Your image_key
-  const imageKey = "img_v3_02f7_53d0ec76-bb17-4554-bef5-5e22842f8bhu";
-
-  // Log image_key
-  console.log("Using image_key:", imageKey);
-
-  // Send image preview using image_key
-  await reply(messageId, "", "image", imageKey);
+  await reply(messageId, helpText, "Help");
 }
 
 async function cmdClear(sessionId, messageId) {
@@ -112,7 +120,6 @@ async function queryFlowise(question, sessionId) {
   const data = {
     question: question,
     overrideConfig: {
-      // maxIterations: 1,
       sessionId: sessionId,
     },
   };
@@ -211,8 +218,16 @@ app.post("/webhook", async (req, res) => {
     }
 
     const userInput = JSON.parse(params.event.message.content);
-    const result = await handleReply(userInput, sessionId, messageId);
-    return res.json(result);
+
+    // Upload image and get image_key
+    const imageKey = await uploadImage();
+    logger("Image Key and Message ID", { imageKey, messageId });
+
+    // Reply with image and text
+    await replyWithImage(messageId, imageKey);
+    await handleReply(userInput, sessionId, messageId);
+
+    return res.json({ code: 0 });
   }
 
   return res.json({ code: 2 });
